@@ -29,11 +29,18 @@ def c(s):
 SCHEMES = [
     ColourScheme(c("000000"), c("FFFFFF"), c("FF0000")),
     ColourScheme(c("FFFFFF"), c("000000"), c("FF0000")),
-    ColourScheme(c("03012C"), c("190E4F"), c("EA638C")),
-    ColourScheme(c("002400"), c("273B09"), c("7B904B")),
+    ColourScheme(c("303A2B"), c("C1BDDB"), c("FF99C9")),
+    ColourScheme(c("00916E"), c("FEEFE5"), c("FA003F")),
     ColourScheme(c("3C0000"), c("774936"), c("F5D0C5")),
     ColourScheme(c("FF9B71"), c("FFFD82"), c("ED217C")),
+    ColourScheme(c("38023B"), c("A288E3"), c("CEFDFF")),
+    ColourScheme(c("F1F2EB"), c("4A4A48"), c("566246")),
+    ColourScheme(c("FEEFE5"), c("EE6123"), c("FFCF00")),
 ]
+
+
+def lerp(t, c1, c2):
+    return tuple(v1 + (v2 - v1) * t for v1, v2 in zip(c1, c2))
 
 
 def draw_clockface(ctx, c):
@@ -157,16 +164,16 @@ class ClockApp(app.App):
         draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, 1, (minute + (second / 60)) / 60, scheme.fg)
         draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, .5, second / 60, scheme.accent)
 
-        colours = [(0, 0, 0) for _ in range(12)]
+        colours = [scheme.bg for _ in range(12)]
 
-        colours[minute // 5] = tuple(scheme.fg[j] / 4 for j in range(3))
+        colours[minute // 5] = lerp(0.5, scheme.bg, scheme.fg)
         colours[hour % 12] = scheme.fg
 
         i = second // 5
         t = max(min(1, second / 5 - i), 0)
-        colours[i] = tuple(colours[i][j] + (scheme.accent[j] - colours[i][j]) * t for j in range(3))
+        colours[i] = lerp(t, colours[i], scheme.accent)
         t2 = 1 - t
-        colours[i - 1 % 12] = tuple(colours[i - 1 % 12][j] + (scheme.accent[j] - colours[i - 1 % 12][j]) * t2 for j in range(3))
+        colours[i - 1 % 12] = lerp(t2, colours[i - 1 % 12], scheme.accent)
 
         for i in range(1, 13):
             tildagonos.leds[i] = tuple(int(255 * colours[i - 1][j]) for j in range(3))
