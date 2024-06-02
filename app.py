@@ -43,61 +43,165 @@ def lerp(t, c1, c2):
     return tuple(v1 + (v2 - v1) * t for v1, v2 in zip(c1, c2))
 
 
-def draw_clockface(ctx, c):
+def draw_clockface(ctx, centre, radius, minor, major, c):
+    cx, cy = centre
+
     ctx.save()
 
     ctx.rgb(*c)
-    ctx.arc(0, 0, SCREEN_RADIUS, 0, 2 * maths.pi, True).stroke()
+    ctx.arc(cx, cy, radius, 0, 2 * maths.pi, True).stroke()
 
     ctx.begin_path()
 
-    for i in range(12):
-        r1 = SCREEN_RADIUS * (0.8 if i % 3 == 0 else 0.9)
-        r2 = SCREEN_RADIUS * 1.0
-        a = i / 6 * maths.pi
+    for i in range(minor):
+        r1 = radius * (0.8 if i % major == 0 else 0.9)
+        r2 = radius * 1.0
+        a = maths.pi / 2 - 2 * maths.pi * i / minor
 
-        ctx.move_to(r1 * maths.cos(a), r1 * maths.sin(a))
-        ctx.line_to(r2 * maths.cos(a), r2 * maths.sin(a))
+        ctx.move_to(cx + r1 * maths.cos(a), cy - r1 * maths.sin(a))
+        ctx.line_to(cx + r2 * maths.cos(a), cy - r2 * maths.sin(a))
 
     ctx.stroke()
 
     ctx.restore()
 
 
-def draw_clockhand(ctx, r, w, f, c):
+def draw_clockhand(ctx, centre, r, w, f, c):
+    cx, cy = centre
     a = maths.pi / 2 - f * 2 * maths.pi
 
     ctx.save()
     ctx.rgb(*c)
 
-    x = r * maths.cos(a)
-    y = -r * maths.sin(a)
+    x = cx + r * maths.cos(a)
+    y = cy - r * maths.sin(a)
 
     dx = w * maths.cos(a - maths.pi / 2)
     dy = -w * maths.sin(a - maths.pi / 2)
     
     ctx.begin_path()
-    ctx.move_to(0, 0)
-    ctx.line_to(dx, dy)
+    ctx.move_to(cx, cy)
+    ctx.line_to(cx + dx, cy + dy)
     ctx.line_to(x + dx, y + dy)
     ctx.line_to(x - dx, y - dy)
-    ctx.line_to(-dx, -dy)
+    ctx.line_to(cx - dx, cy - dy)
     ctx.close_path()
     ctx.fill()
 
-    ctx.arc(0, 0, w, 0, 2 * maths.pi, True).fill()
+    ctx.arc(cx, cy, w, 0, 2 * maths.pi, True).fill()
     ctx.arc(x, y, w, 0, 2 * maths.pi, True).fill()
 
     ctx.restore()
 
 
+class Overlay:
+    def __init__(self):
+        self.enabled = True
+        self.scheme = SCHEMES[0]
+
+    def update(self, delta):
+        pass
+
+    def draw(self, ctx):
+        if self.enabled:
+            self.draw_enabled(ctx)
+
+
+class ClockOverlay(Overlay):
+    def __init__(self):
+        super().__init__()
+        self.hour = 0
+        self.minute = 0
+        self.second = 0
+
+    def update(self, delta):
+        year, month, mday, hour, minute, second, weekday, yearday = time.localtime()
+        self.hour = hour
+        self.minute = minute
+        self.second = second
+
+    def draw_enabled(self, ctx):
+        draw_clockface(ctx, (0, 0), SCREEN_RADIUS, 12, 3, self.scheme.fg)
+        draw_clockhand(ctx, (0, 0), 0.5 * SCREEN_RADIUS, 3, (self.hour + (self.minute / 60)) / 12 % 1, self.scheme.fg)
+        draw_clockhand(ctx, (0, 0), 0.8 * SCREEN_RADIUS, 1, (self.minute + (self.second / 60)) / 60, self.scheme.fg)
+        draw_clockhand(ctx, (0, 0), 0.8 * SCREEN_RADIUS, .5, self.second / 60, self.scheme.accent)
+
+
+class MonthOverlay(Overlay):
+    def __init__(self):
+        super().__init__()
+        self.month = 0
+
+    def update(self, delta):
+        year, month, mday, hour, minute, second, weekday, yearday = time.localtime()
+        self.month = month
+
+    def draw_enabled(self, ctx):
+        a = maths.pi / 2 - 2 * maths.pi / 3
+        x = SCREEN_RADIUS / 2 * maths.cos(a)
+        y = -SCREEN_RADIUS / 2 * maths.sin(a)
+
+        c = lerp(0.5, self.scheme.bg, self.scheme.fg)
+        draw_clockface(ctx, (x, y), SCREEN_RADIUS / 4, 12, 12, c)
+        draw_clockhand(ctx, (x, y), SCREEN_RADIUS / 5, 2, self.month / 12, c)
+
+
+def get_monthdays(year, month):
+    assert 1 <= month <= 12
+
+    days = [31, None, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+    if month == 2:
+        if year % 4 == 0 and year % 100 == 0 and year % 400 != 0:
+            return 29
+        else:
+            return 28
+    else:
+        return days[month - 1]
+
+
+
+class DayOverlay(Overlay):
+    def __init__(self):
+        super().__init__()
+        self.year = 0
+        self.month = 0
+        self.mday = 0
+
+    def update(self, delta):
+        year, month, mday, hour, minute, second, weekday, yearday = time.localtime()
+        self.year = year
+        self.month = month
+        self.mday = mday
+
+    def draw_enabled(self, ctx):
+        a = maths.pi / 2 - 4 * maths.pi / 3
+        x = SCREEN_RADIUS / 2 * maths.cos(a)
+        y = -SCREEN_RADIUS / 2 * maths.sin(a)
+
+        minor = get_monthdays(self.year, self.month)
+        c = lerp(0.5, self.scheme.bg, self.scheme.fg)
+        draw_clockface(ctx, (x, y), SCREEN_RADIUS / 4, minor, minor, c)
+        draw_clockhand(ctx, (x, y), SCREEN_RADIUS / 5, 2, self.mday / minor, c)
+
+
 class ClockApp(app.App):
     def __init__(self):
+        super().__init__()
+
         self.button_states = Buttons(self)
         self.fetched = False
         self.last_fetched = None
+        self.clock = ClockOverlay()
+        self.month = MonthOverlay()
+        self.day = DayOverlay()
         self.notification = Notification("Initialized!")
         self.scheme_i = 0
+
+        self.overlays.append(self.month)
+        self.overlays.append(self.day)
+        self.overlays.append(self.clock)
+        self.overlays.append(self.notification)
 
         eventbus.emit(PatternDisable())
         eventbus.on(RequestForegroundPushEvent, self._on_fg, self)
@@ -118,9 +222,11 @@ class ClockApp(app.App):
         if self.button_states.get(BUTTON_TYPES["CONFIRM"]):
             self.button_states.clear()
             self.scheme_i = (self.scheme_i + 1) % len(SCHEMES)
+            for overlay in self.overlays:
+                overlay.scheme = SCHEMES[self.scheme_i]
 
-        if self.notification is not None:
-            self.notification.update(delta)
+        for overlay in self.overlays:
+            overlay.update(delta)
 
     def background_update(self, delta):
         if not self.fetched and (self.last_fetched is None or time.time() - self.last_fetched > 60):
@@ -159,10 +265,7 @@ class ClockApp(app.App):
 
         ctx.restore()
 
-        draw_clockface(ctx, scheme.fg)
-        draw_clockhand(ctx, 0.5 * SCREEN_RADIUS, 3, (hour + (minute / 60)) / 12 % 1, scheme.fg)
-        draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, 1, (minute + (second / 60)) / 60, scheme.fg)
-        draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, .5, second / 60, scheme.accent)
+        self.draw_overlays(ctx)
 
         colours = [scheme.bg for _ in range(12)]
 
@@ -177,9 +280,6 @@ class ClockApp(app.App):
 
         for i in range(1, 13):
             tildagonos.leds[i] = tuple(int(255 * colours[i - 1][j]) for j in range(3))
-
-        if self.notification is not None:
-            self.notification.draw(ctx)
 
 
 __app_export__ = ClockApp
