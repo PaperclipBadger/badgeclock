@@ -1,0 +1,14 @@
+[app]
+name = "Blaine's Clock"
+category = "Badge"
+wifi_preference = true
+
+[entry]
+class = "ClockApp"
+
+[metadata]
+author = "Blaine"
+license	= "MIT"
+url = "https://github.com/paperclipbadger/badgeclock"
+description = "An analogue clock that usually doesn't crash!"
+version = "0.1"
