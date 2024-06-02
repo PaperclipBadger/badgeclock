@@ -1,3 +1,4 @@
+import collections
 import math as maths
 import time
 
@@ -17,9 +18,22 @@ from app_components import Notification
 
 SCREEN_RADIUS = 120
 
-FG = (1, 1, 1)
-BG = (0, 0, 0)
-AC = (1, 0, 0)
+
+ColourScheme = collections.namedtuple("ColourScheme", ["bg", "fg", "accent"])
+
+
+def c(s):
+    return tuple(int(s[i : i + 2], 16) / 255 for i in range(0, 6, 2))
+
+
+SCHEMES = [
+    ColourScheme(c("000000"), c("FFFFFF"), c("FF0000")),
+    ColourScheme(c("FFFFFF"), c("000000"), c("FF0000")),
+    ColourScheme(c("03012C"), c("190E4F"), c("EA638C")),
+    ColourScheme(c("002400"), c("273B09"), c("7B904B")),
+    ColourScheme(c("3C0000"), c("774936"), c("F5D0C5")),
+    ColourScheme(c("FF9B71"), c("FFFD82"), c("ED217C")),
+]
 
 
 def draw_clockface(ctx, c):
@@ -72,15 +86,14 @@ def draw_clockhand(ctx, r, w, f, c):
 
 class ClockApp(app.App):
     def __init__(self):
-        # set_time()
-        print("asodifhoaisnf")
         self.button_states = Buttons(self)
         self.fetched = False
         self.last_fetched = None
         self.notification = Notification("Initialized!")
+        self.scheme_i = 0
+
         eventbus.emit(PatternDisable())
         eventbus.on(RequestForegroundPushEvent, self._on_fg, self)
-        wifi.connect()
 
     def _on_fg(self, event):
         if event.app == self:
@@ -94,6 +107,13 @@ class ClockApp(app.App):
             self.button_states.clear()
             eventbus.emit(PatternEnable())
             self.minimise()
+
+        if self.button_states.get(BUTTON_TYPES["CONFIRM"]):
+            self.button_states.clear()
+            self.scheme_i = (self.scheme_i + 1) % len(SCHEMES)
+
+        if self.notification is not None:
+            self.notification.update(delta)
 
     def background_update(self, delta):
         if not self.fetched and (self.last_fetched is None or time.time() - self.last_fetched > 60):
@@ -122,38 +142,37 @@ class ClockApp(app.App):
 
     def draw(self, ctx):
         year, month, mday, hour, minute, second, weekday, yearday = time.localtime()
+        scheme = SCHEMES[self.scheme_i]
 
         ctx.save()
-        ctx.rgb(*BG).rectangle(-SCREEN_RADIUS, -SCREEN_RADIUS, 2 * SCREEN_RADIUS, 2 * SCREEN_RADIUS).fill()
+        ctx.rgb(*scheme.bg).rectangle(-SCREEN_RADIUS, -SCREEN_RADIUS, 2 * SCREEN_RADIUS, 2 * SCREEN_RADIUS).fill()
 
         # label = f"{mday:02d}-{month:02d}-{year:02d}"
-        # ctx.rgb(*FG).move_to(-80,60).text(label)
+        # ctx.rgb(*scheme.fg).move_to(-80,60).text(label)
 
         ctx.restore()
 
-        draw_clockface(ctx, FG)
-        draw_clockhand(ctx, 0.5 * SCREEN_RADIUS, 3, (hour + (minute / 60)) / 12 % 1, FG)
-        draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, 1, (minute + (second / 60)) / 60, FG)
-        draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, .5, second / 60, AC)
+        draw_clockface(ctx, scheme.fg)
+        draw_clockhand(ctx, 0.5 * SCREEN_RADIUS, 3, (hour + (minute / 60)) / 12 % 1, scheme.fg)
+        draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, 1, (minute + (second / 60)) / 60, scheme.fg)
+        draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, .5, second / 60, scheme.accent)
 
-        COLOURS = [(0, 0, 0) for _ in range(12)]
+        colours = [(0, 0, 0) for _ in range(12)]
 
-        COLOURS[minute // 5] = tuple(FG[j] / 4 for j in range(3))
-        COLOURS[hour % 12] = FG
+        colours[minute // 5] = tuple(scheme.fg[j] / 4 for j in range(3))
+        colours[hour % 12] = scheme.fg
 
         i = second // 5
         t = max(min(1, second / 5 - i), 0)
-        COLOURS[i] = tuple(COLOURS[i][j] + (AC[j] - COLOURS[i][j]) * t for j in range(3))
+        colours[i] = tuple(colours[i][j] + (scheme.accent[j] - colours[i][j]) * t for j in range(3))
         t2 = 1 - t
-        COLOURS[i - 1 % 12] = tuple(COLOURS[i - 1 % 12][j] + (AC[j] - COLOURS[i - 1 % 12][j]) * t2 for j in range(3))
+        colours[i - 1 % 12] = tuple(colours[i - 1 % 12][j] + (scheme.accent[j] - colours[i - 1 % 12][j]) * t2 for j in range(3))
 
         for i in range(1, 13):
-            tildagonos.leds[i] = tuple(int(255 * COLOURS[i - 1][j]) for j in range(3))
+            tildagonos.leds[i] = tuple(int(255 * colours[i - 1][j]) for j in range(3))
 
         if self.notification is not None:
             self.notification.draw(ctx)
-
-
 
 
 __app_export__ = ClockApp
