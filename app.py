@@ -158,7 +158,7 @@ class ButtonIndicator(Overlay):
         self.t = 0
         self.enabled = True
 
-    def update(self, delta):
+    def background_update(self, delta):
         self.t += delta / 1000
         if self.t >= self.l:
             self.enabled = False
@@ -286,6 +286,10 @@ class ClockApp(app.App):
             except Exception as e:
                 message = str(e)
                 self.notification = Notification(message)
+
+        for overlay in self.overlays:
+            if hasattr(overlay, "background_update"):
+                overlay.background_update(delta)
 
     def draw(self, ctx):
         year, month, mday, hour, minute, second, weekday, yearday = time.localtime()
