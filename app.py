@@ -12,31 +12,14 @@ from system.patterndisplay.events import PatternDisable, PatternEnable
 from system.scheduler.events import RequestForegroundPushEvent
 from events.input import Buttons, BUTTON_TYPES
 
+from app_components import Notification
+
 
 SCREEN_RADIUS = 120
 
 FG = (1, 1, 1)
 BG = (0, 0, 0)
 AC = (1, 0, 0)
-
-
-def set_time():
-    response = requests.get("https://timeapi.io/api/Time/current/zone?timeZone=Europe%2FLondon")
-    if response.status_code == 200:
-        data = response.json()
-        ttuple = (
-            data["year"],
-            data["month"],
-            data["day"],
-            data["dayOfWeek"],
-            data["hour"],
-            data["minute"],
-            data["seconds"],
-            data["milliSeconds"],
-        )
-        machine.RTC().datetime(ttuple)
-    else:
-        print("Error!", response.json())
 
 
 def draw_clockface(ctx, c):
@@ -93,6 +76,8 @@ class ClockApp(app.App):
         print("asodifhoaisnf")
         self.button_states = Buttons(self)
         self.fetched = False
+        self.last_fetched = None
+        self.notification = Notification("Initialized!")
         eventbus.emit(PatternDisable())
         eventbus.on(RequestForegroundPushEvent, self._on_fg, self)
         wifi.connect()
@@ -111,20 +96,42 @@ class ClockApp(app.App):
             self.minimise()
 
     def background_update(self, delta):
-        if not self.fetched:
-            if wifi.status():
-                set_time()
-                self.fetched = True
+        if not self.fetched and (self.last_fetched is None or time.time() - self.last_fetched > 60):
+            self.last_fetched = time.time()
+            try:
+                response = requests.get("https://timeapi.io/api/Time/current/zone?timeZone=Europe%2FLondon")
+                if response.status_code == 200:
+                    data = response.json()
+                    ttuple = (
+                        data["year"],
+                        data["month"],
+                        data["day"],
+                        data["dayOfWeek"],
+                        data["hour"],
+                        data["minute"],
+                        data["seconds"],
+                        data["milliSeconds"],
+                    )
+                    machine.RTC().datetime(ttuple)
+                    self.fetched = True
+                else:
+                    raise ValueError(f"Status: {response.status_code}, Message: {response.json()}")
+            except Exception as e:
+                message = str(e)
+                self.notification = Notification(message)
 
     def draw(self, ctx):
+        year, month, mday, hour, minute, second, weekday, yearday = time.localtime()
+
         ctx.save()
         ctx.rgb(*BG).rectangle(-SCREEN_RADIUS, -SCREEN_RADIUS, 2 * SCREEN_RADIUS, 2 * SCREEN_RADIUS).fill()
+
+        # label = f"{mday:02d}-{month:02d}-{year:02d}"
+        # ctx.rgb(*FG).move_to(-80,60).text(label)
+
         ctx.restore()
 
         draw_clockface(ctx, FG)
-        
-        year, month, mday, hour, minute, second, weekday, yearday = time.localtime()
-
         draw_clockhand(ctx, 0.5 * SCREEN_RADIUS, 3, (hour + (minute / 60)) / 12 % 1, FG)
         draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, 1, (minute + (second / 60)) / 60, FG)
         draw_clockhand(ctx, 0.8 * SCREEN_RADIUS, .5, second / 60, AC)
@@ -143,8 +150,9 @@ class ClockApp(app.App):
         for i in range(1, 13):
             tildagonos.leds[i] = tuple(int(255 * COLOURS[i - 1][j]) for j in range(3))
 
-        # label = f"{hour:02d}:{minute:02d}:{second:02d}"
-        # ctx.rgb(1,0,0).move_to(-80,0).text(label)
+        if self.notification is not None:
+            self.notification.draw(ctx)
+
 
 
 
