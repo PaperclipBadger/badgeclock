@@ -310,8 +310,8 @@ class ClockApp(app.App):
         colours[minute // 5] = lerp(0.5, scheme.bg, scheme.fg)
         colours[hour % 12] = scheme.fg
 
-        i = second // 5
-        t = max(min(1, second / 5 - i), 0)
+        i = ((second + 2) % 60) // 5
+        t = max(min(1, ((second + 2) % 60) / 5 - i), 0)
         colours[i] = lerp(t, colours[i], scheme.accent)
         t2 = 1 - t
         colours[i - 1 % 12] = lerp(t2, colours[i - 1 % 12], scheme.accent)
