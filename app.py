@@ -146,6 +146,36 @@ class MonthOverlay(Overlay):
         draw_clockhand(ctx, (x, y), SCREEN_RADIUS / 5, 2, self.month / 12, c)
 
 
+class ButtonIndicator(Overlay):
+    def __init__(self, button):
+        super().__init__()
+        self.button = button
+        self.t = 1000
+        self.l = 0.66
+        self.enabled = False
+
+    def fire(self):
+        self.t = 0
+        self.enabled = True
+
+    def update(self, delta):
+        self.t += delta / 1000
+        if self.t >= self.l:
+            self.enabled = False
+
+    def draw_enabled(self, ctx):
+        a = maths.pi / 2 - 2 * maths.pi * self.button / 6
+        cx = (SCREEN_RADIUS + 20) * maths.cos(a)
+        cy = -(SCREEN_RADIUS + 20) * maths.sin(a)
+        
+        ctx.save()
+        ctx.rgb(*self.scheme.accent)
+
+        f = 1 - (1 - self.t / self.l) ** 2
+        ctx.arc(cx, cy, 30 + 10 * f, 0, 2 * maths.pi, True).fill()
+        ctx.restore()
+
+
 def get_monthdays(year, month):
     assert 1 <= month <= 12
 
@@ -195,6 +225,7 @@ class ClockApp(app.App):
         self.clock = ClockOverlay()
         self.month = MonthOverlay()
         self.day = DayOverlay()
+        self.button_indicators = [ButtonIndicator(i) for i in range(6)]
         self.notification = Notification("Initialized!")
         self.scheme_i = 0
 
@@ -202,6 +233,7 @@ class ClockApp(app.App):
         self.overlays.append(self.day)
         self.overlays.append(self.clock)
         self.overlays.append(self.notification)
+        self.overlays.extend(self.button_indicators)
 
         eventbus.emit(PatternDisable())
         eventbus.on(RequestForegroundPushEvent, self._on_fg, self)
@@ -216,11 +248,13 @@ class ClockApp(app.App):
             # Calling clear() ensures the next time you open the app, it stays open.
             # Without it the app would close again immediately.
             self.button_states.clear()
+            self.button_indicators[5].fire()
             eventbus.emit(PatternEnable())
             self.minimise()
 
         if self.button_states.get(BUTTON_TYPES["CONFIRM"]):
             self.button_states.clear()
+            self.button_indicators[2].fire()
             self.scheme_i = (self.scheme_i + 1) % len(SCHEMES)
             for overlay in self.overlays:
                 overlay.scheme = SCHEMES[self.scheme_i]
